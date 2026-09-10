@@ -46,14 +46,6 @@ app.use("/api/account", accountRoute);
 
 app.use("/api/transactions", transactionRoute);
 
-app.get("/api/auth/test", protect, (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "Authentication middleware is working",
-    user: req.user,
-  });
-});
-
 // Global error handler
 app.use(errorHandler);
 
