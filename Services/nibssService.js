@@ -71,19 +71,25 @@ const insertBvn = async (data, token) => {
 };
 
 
-const validateBvn = async (data, token) => {
+const validateBvn = async (bvn, token) => {
   try {
-    const response = await nibssApi.post("/api/validateBvn", data, {
-      headers: {
-        Authorization: `Bearer ${token}`,
+    const response = await nibssApi.post(
+      "/api/validateBvn",
+      {
+        bvn: bvn,
       },
-    });
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    );
 
     return response.data;
   } catch (error) {
     console.error(
       "NIBSS BVN validation failed:",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
 
     throw error;

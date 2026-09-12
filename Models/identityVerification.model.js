@@ -27,6 +27,11 @@ const identityVerificationSchema = new mongoose.Schema(
       select: false,
     },
 
+    dob: {
+      type: Date,
+      default: null,
+    },
+
     status: {
       type: String,
       enum: ["pending", "verified", "failed"],

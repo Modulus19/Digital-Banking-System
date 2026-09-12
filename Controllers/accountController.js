@@ -37,7 +37,7 @@ const createAccount = async (req, res) => {
 
     // Only one account per customer
     const existingAccount = await Account.findOne({
-      customerId: customer._id,
+      customer: customer._id,
     });
 
     if (existingAccount) {
@@ -55,10 +55,11 @@ const createAccount = async (req, res) => {
     }
 
     // Find successful identity verification
+    // The IdentityVerification model uses "customer", not "customerId"
     const verification = await IdentityVerification.findOne({
-      customerId: customer._id,
+      customer: customer._id,
       status: "verified",
-    }).sort({ createdAt: -1 });
+    }).select("+bvn +nin");
 
     if (!verification) {
       return res.status(400).json({
@@ -67,10 +68,14 @@ const createAccount = async (req, res) => {
       });
     }
 
-    const kycType = verification.identityType;
-    const kycID = verification.identityNumber;
+    // Determine whether verification was done with BVN or NIN
+    const identityType = verification.verificationType;
 
-    if (!kycType || !kycID) {
+    const identityNumber =
+      identityType === "bvn" ? verification.bvn : verification.nin;
+
+    // Make sure the identity information exists
+    if (!identityType || !identityNumber) {
       return res.status(400).json({
         success: false,
         message: "Identity verification information is incomplete",
@@ -83,17 +88,24 @@ const createAccount = async (req, res) => {
 
     // Data sent to NIBSS
     const accountData = {
-      kycType: kycType.toLowerCase(),
-      kycID,
-      dob: customer.dateOfBirth
-        ? new Date(customer.dateOfBirth).toISOString().split("T")[0]
+      kycType: identityType.toLowerCase(),
+      kycID: identityNumber,
+      dob: verification.dob
+        ? new Date(verification.dob).toISOString().split("T")[0]
         : undefined,
     };
+
+    if (!accountData.dob) {
+      return res.status(400).json({
+        success: false,
+        message: "Date of birth is missing from identity verification",
+      });
+    }
 
     console.log("Account creation payload:");
     console.log(accountData);
 
-    // Create the account on NIBSS
+    // Create account on NIBSS
     const nibssResponse = await createNibssAccount(accountData, token);
 
     console.log("Raw NIBSS account response:");
@@ -141,7 +153,7 @@ const createAccount = async (req, res) => {
 
     // Save the NIBSS-created account locally
     const account = await Account.create({
-      customerId: customer._id,
+      customer: customer._id,
       accountNumber: String(accountNumber),
       accountName,
       bankCode: String(bankCode),
@@ -200,7 +212,7 @@ const createAccount = async (req, res) => {
 const getMyAccount = async (req, res) => {
   try {
     const account = await Account.findOne({
-      customerId: req.user.id,
+      customer: req.user.id,
     }).select(
       "accountNumber accountName balance bankCode bankName currency status openedAt",
     );
@@ -305,7 +317,7 @@ const performNameEnquiry = async (req, res) => {
 const getBalance = async (req, res) => {
   try {
     const account = await Account.findOne({
-      customerId: req.user.id,
+      customer: req.user.id,
     });
 
     if (!account) {
@@ -363,7 +375,7 @@ const transfer = async (req, res) => {
     // --------------------------------------------------
 
     const senderAccount = await Account.findOne({
-      customerId: req.user.id,
+      customer: req.user.id,
     });
 
     if (!senderAccount) {
@@ -418,16 +430,22 @@ const transfer = async (req, res) => {
         Math.random() * 100000,
       )}`;
 
-      await Transaction.create({
-        customerId: req.user.id,
-        accountId: senderAccount._id,
-        type: "transfer",
-        amount: transferAmount,
-        status: "successful",
-        reference,
-        provider: "Digital Banking System",
-        description: `Transfer to ${localRecipient.accountNumber}`,
-      });
+     await Transaction.create({
+       customer: req.user.id,
+       reference,
+       type: "intra-bank-transfer",
+       amount: transferAmount,
+       senderAccount: senderAccount.accountNumber,
+       senderName: senderAccount.accountName,
+       senderBankCode: senderAccount.bankCode,
+       recipientAccount: localRecipient.accountNumber,
+       recipientName: localRecipient.accountName,
+       recipientBankCode: localRecipient.bankCode,
+       narration: `Transfer to ${localRecipient.accountNumber}`,
+       status: "successful",
+       provider: "Digital Banking System",
+       completedAt: new Date(),
+     });
 
       return res.status(200).json({
         success: true,
@@ -522,10 +540,16 @@ const transfer = async (req, res) => {
     // STEP 5: ONLY DEBIT AFTER NIBSS SUCCESS
     // --------------------------------------------------
 
+    const providerStatus = String(
+      nibssTransferResponse?.status ||
+        nibssTransferResponse?.data?.status ||
+        "",
+    ).toUpperCase();
+
     const transferSuccessful =
       nibssTransferResponse?.success === true ||
-      nibssTransferResponse?.status === "success" ||
-      nibssTransferResponse?.status === "successful" ||
+      providerStatus === "SUCCESS" ||
+      providerStatus === "SUCCESSFUL" ||
       nibssTransferResponse?.data?.success === true;
 
     if (!transferSuccessful) {
@@ -543,21 +567,31 @@ const transfer = async (req, res) => {
       });
     }
 
-    // Debit sender only after success
+    // Debit sender only after successful NIBSS response
     senderAccount.balance = Number(senderAccount.balance) - transferAmount;
 
     await senderAccount.save();
 
     // Save transaction
     await Transaction.create({
-      customerId: req.user.id,
-      accountId: senderAccount._id,
-      type: "transfer",
-      amount: transferAmount,
-      status: "successful",
+      customer: req.user.id,
       reference,
-      provider: "NIBSS",
-      description: `Inter-bank transfer to ${recipientName}`,
+      type: "inter-bank-transfer",
+      amount: transferAmount,
+      senderAccount: senderAccount.accountNumber,
+      senderName: senderAccount.accountName,
+      senderBankCode: senderAccount.bankCode,
+      recipientAccount: String(to),
+      recipientName,
+      recipientBankCode: String(bankCode),
+      narration: `Inter-bank transfer to ${recipientName}`,
+      status: "successful",
+      providerReference:
+        nibssTransferResponse?.reference ||
+        nibssTransferResponse?.data?.reference ||
+        null,
+      provider: "NIBSS By Phoenix",
+      completedAt: new Date(),
     });
 
     return res.status(200).json({
@@ -577,7 +611,6 @@ const transfer = async (req, res) => {
     });
   } catch (error) {
     console.error("Transfer error:");
-
     console.error(error.response?.data || error.message);
 
     return res.status(error.response?.status || 500).json({
