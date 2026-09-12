@@ -135,28 +135,28 @@ const onboardWithNin = async (req, res, next) => {
     const verificationResponse = await validateNin(nin, token);
 
     // 5. Save verification details
-    await IdentityVerification.findOneAndUpdate(
-      { customer: customer._id },
-      {
-        customer: customer._id,
-        verificationType: "nin",
-        nin,
-        dob:
-          verificationResponse?.data?.dob ||
-          verificationResponse?.response?.dob ||
-          null,
-        status: "verified",
-        verificationReference: nin,
-        provider: "NIBSS By Phoenix",
-        verifiedAt: new Date(),
-        failureReason: null,
-      },
-      {
-        upsert: true,
-        new: true,
-        runValidators: true,
-      },
-    );
+   await IdentityVerification.findOneAndUpdate(
+     { customer: customer._id },
+     {
+       customer: customer._id,
+       verificationType: "nin",
+       nin,
+       dob:
+         verificationResponse?.data?.dob ||
+         verificationResponse?.response?.dob ||
+         null,
+       status: "verified",
+       verificationReference: nin,
+       provider: "NIBSS By Phoenix",
+       verifiedAt: new Date(),
+       failureReason: null,
+     },
+     {
+       upsert: true,
+       new: true,
+       runValidators: true,
+     },
+   );
 
     // 6. Update customer
     customer.onboardingStatus = "verified";
