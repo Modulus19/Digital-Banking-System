@@ -121,25 +121,30 @@ const insertNin = async (data, token) => {
 };
 
 
-const validateNin = async (data, token) => {
+const validateNin = async (nin, token) => {
   try {
-    const response = await nibssApi.post("/api/validateNin", data, {
-      headers: {
-        Authorization: `Bearer ${token}`,
+    const response = await nibssApi.post(
+      "/api/validateNin",
+      {
+        nin: nin,
       },
-    });
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    );
 
     return response.data;
   } catch (error) {
     console.error(
       "NIBSS NIN validation failed:",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
 
     throw error;
   }
 };
-
 
 // ======================================================
 // ACCOUNT CREATION
