@@ -141,7 +141,10 @@ const onboardWithNin = async (req, res, next) => {
         customer: customer._id,
         verificationType: "nin",
         nin,
-        dob: verificationResponse?.data?.dob || null,
+        dob:
+          verificationResponse?.data?.dob ||
+          verificationResponse?.response?.dob ||
+          null,
         status: "verified",
         verificationReference: nin,
         provider: "NIBSS By Phoenix",
