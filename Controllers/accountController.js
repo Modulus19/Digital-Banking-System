@@ -61,6 +61,9 @@ const createAccount = async (req, res) => {
       status: "verified",
     }).select("+bvn +nin");
 
+    console.log("IDENTITY VERIFICATION FROM DB:");
+    console.log(verification);
+
     if (!verification) {
       return res.status(400).json({
         success: false,
@@ -430,22 +433,22 @@ const transfer = async (req, res) => {
         Math.random() * 100000,
       )}`;
 
-     await Transaction.create({
-       customer: req.user.id,
-       reference,
-       type: "intra-bank-transfer",
-       amount: transferAmount,
-       senderAccount: senderAccount.accountNumber,
-       senderName: senderAccount.accountName,
-       senderBankCode: senderAccount.bankCode,
-       recipientAccount: localRecipient.accountNumber,
-       recipientName: localRecipient.accountName,
-       recipientBankCode: localRecipient.bankCode,
-       narration: `Transfer to ${localRecipient.accountNumber}`,
-       status: "successful",
-       provider: "Digital Banking System",
-       completedAt: new Date(),
-     });
+      await Transaction.create({
+        customer: req.user.id,
+        reference,
+        type: "intra-bank-transfer",
+        amount: transferAmount,
+        senderAccount: senderAccount.accountNumber,
+        senderName: senderAccount.accountName,
+        senderBankCode: senderAccount.bankCode,
+        recipientAccount: localRecipient.accountNumber,
+        recipientName: localRecipient.accountName,
+        recipientBankCode: localRecipient.bankCode,
+        narration: `Transfer to ${localRecipient.accountNumber}`,
+        status: "successful",
+        provider: "Digital Banking System",
+        completedAt: new Date(),
+      });
 
       return res.status(200).json({
         success: true,
